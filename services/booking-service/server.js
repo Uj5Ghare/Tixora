@@ -5,11 +5,16 @@ const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 5003;
-const JWT_SECRET = process.env.JWT_SECRET || 'tixora_microservices_jwt_secret_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const EVENT_SERVICE_URL = process.env.EVENT_SERVICE_URL || 'http://localhost:5002';
 const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5004';
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:5001';
+
+if (!JWT_SECRET) {
+  console.error('[booking-service] FATAL: JWT_SECRET environment variable is required');
+  process.exit(1);
+}
 
 app.use(cors());
 app.use(express.json());
