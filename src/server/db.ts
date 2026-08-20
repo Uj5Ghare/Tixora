@@ -29,9 +29,7 @@ class InDatabase {
     // Seed Users
     const seedUsersData: Array<Omit<User, 'id' | 'createdAt'>> = [
       { name: 'Admin User', email: 'admin@tixora.com', role: 'admin', isVerified: true, password: defaultPasswordHash },
-      { name: 'Admin User', email: 'admin@tixora.com', role: 'admin', isVerified: true, password: defaultPasswordHash },
       { name: 'Admin User', email: 'admin@tixora.io', role: 'admin', isVerified: true, password: defaultPasswordHash },
-      { name: 'Demo User', email: 'user@tixora.com', role: 'user', isVerified: true, password: defaultPasswordHash },
       { name: 'Demo User', email: 'user@tixora.com', role: 'user', isVerified: true, password: defaultPasswordHash },
       { name: 'Demo User', email: 'user@tixora.io', role: 'user', isVerified: true, password: defaultPasswordHash },
       { name: 'Alice Smith', email: 'alice@tixora.com', role: 'user', isVerified: true, password: defaultPasswordHash },
@@ -50,7 +48,7 @@ class InDatabase {
 
     for (const u of seedUsersData) {
       const id = `usr_${userIndex++}`;
-      if (u.role === 'admin') adminUserId = id;
+      if (u.role === 'admin' && !adminUserId) adminUserId = id;
       else userIds.push(id);
 
       this.users.set(id, {

@@ -21,15 +21,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('tixora_user') || localStorage.getItem('tixora_user');
-    const savedToken = localStorage.getItem('tixora_token') || localStorage.getItem('tixora_token');
+    const savedUser = localStorage.getItem('tixora_user');
+    const savedToken = localStorage.getItem('tixora_token');
     if (savedUser && savedToken) {
       try {
         setUser(JSON.parse(savedUser));
         setToken(savedToken);
       } catch (e) {
-        localStorage.removeItem('tixora_user');
-        localStorage.removeItem('tixora_token');
         localStorage.removeItem('tixora_user');
         localStorage.removeItem('tixora_token');
       }
@@ -102,8 +100,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('tixora_user');
-    localStorage.removeItem('tixora_token');
     localStorage.removeItem('tixora_user');
     localStorage.removeItem('tixora_token');
   };
