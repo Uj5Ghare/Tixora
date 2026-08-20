@@ -3,6 +3,12 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [dev, main]
+    paths-ignore:
+      - '**/*.md'
+      - '.gitignore'
+      - '.env*'
+      - 'docker-compose*.yml'
+      - 'Dockerfile*'
   workflow_dispatch:
 
 permissions:
