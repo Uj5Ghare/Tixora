@@ -1,0 +1,384 @@
+version: '3.8'
+
+services:
+  # =================================================================
+  # DATABASES & PERSISTENT DATA TIERS (Database-Per-Service Pattern)
+  # =================================================================
+
+  # Auth Service Database
+  auth-db:
+    image: mongo:7.0
+    container_name: tixora-auth-db
+    restart: unless-stopped
+    ports:
+      - "${AUTH_DB_PORT}:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=tixora_auth
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - auth-db-data:/data/db
+    networks:
+      - tixora-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # Event Service Database
+  event-db:
+    image: mongo:7.0
+    container_name: tixora-event-db
+    restart: unless-stopped
+    ports:
+      - "${EVENT_DB_PORT}:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=tixora_events
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - event-db-data:/data/db
+    networks:
+      - tixora-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # Booking Service Database
+  booking-db:
+    image: mongo:7.0
+    container_name: tixora-booking-db
+    restart: unless-stopped
+    ports:
+      - "${BOOKING_DB_PORT}:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=tixora_bookings
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - booking-db-data:/data/db
+    networks:
+      - tixora-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # Payment Service Database
+  payment-db:
+    image: mongo:7.0
+    container_name: tixora-payment-db
+    restart: unless-stopped
+    ports:
+      - "${PAYMENT_DB_PORT}:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=tixora_payments
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - payment-db-data:/data/db
+    networks:
+      - tixora-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # Redis Cache & Inter-Service Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: tixora-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - tixora-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # =================================================================
+  # APPLICATION MICROSERVICES
+  # =================================================================
+
+  # 1. API Gateway (Ingress & Reverse Proxy)
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: tixora-api-gateway
+    restart: unless-stopped
+    ports:
+      - "${API_GATEWAY_PORT}:5000"
+    environment:
+      - PORT=5000
+      - NODE_ENV=${NODE_ENV}
+      - AUTH_SERVICE_URL=http://auth-service:5001
+      - EVENT_SERVICE_URL=http://event-service:5002
+      - BOOKING_SERVICE_URL=http://booking-service:5003
+      - NOTIFICATION_SERVICE_URL=http://notification-service:5004
+      - PAYMENT_SERVICE_URL=http://payment-service:5005
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ./services/api-gateway:/app
+      - api-gateway-node-modules:/app/node_modules
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      event-service:
+        condition: service_healthy
+      booking-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tixora-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 2. Auth & Identity Microservice
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: tixora-auth-service
+    restart: unless-stopped
+    ports:
+      - "${AUTH_SERVICE_PORT}:5001"
+    environment:
+      - PORT=5001
+      - NODE_ENV=${NODE_ENV}
+      - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@auth-db:27017/tixora_auth?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - NOTIFICATION_SERVICE_URL=http://notification-service:5004
+    volumes:
+      - ./services/auth-service:/app
+      - auth-service-node-modules:/app/node_modules
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tixora-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 3. Event Catalog Microservice
+  event-service:
+    build:
+      context: ./services/event-service
+      dockerfile: Dockerfile
+    container_name: tixora-event-service
+    restart: unless-stopped
+    ports:
+      - "${EVENT_SERVICE_PORT}:5002"
+    environment:
+      - PORT=5002
+      - NODE_ENV=${NODE_ENV}
+      - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@event-db:27017/tixora_events?authSource=admin
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services/event-service:/app
+      - event-service-node-modules:/app/node_modules
+    depends_on:
+      event-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tixora-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 4. Booking & Order Microservice
+  booking-service:
+    build:
+      context: ./services/booking-service
+      dockerfile: Dockerfile
+    container_name: tixora-booking-service
+    restart: unless-stopped
+    ports:
+      - "${BOOKING_SERVICE_PORT}:5003"
+    environment:
+      - PORT=5003
+      - NODE_ENV=${NODE_ENV}
+      - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@booking-db:27017/tixora_bookings?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - EVENT_SERVICE_URL=http://event-service:5002
+      - NOTIFICATION_SERVICE_URL=http://notification-service:5004
+      - AUTH_SERVICE_URL=http://auth-service:5001
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ./services/booking-service:/app
+      - booking-service-node-modules:/app/node_modules
+    depends_on:
+      booking-db:
+        condition: service_healthy
+      event-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tixora-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 5. Notification & Messaging Microservice
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: tixora-notification-service
+    restart: unless-stopped
+    ports:
+      - "${NOTIFICATION_SERVICE_PORT}:5004"
+    environment:
+      - PORT=5004
+      - NODE_ENV=${NODE_ENV}
+      - REDIS_URL=redis://redis:6379
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASS=${EMAIL_PASS}
+    volumes:
+      - ./services/notification-service:/app
+      - notification-service-node-modules:/app/node_modules
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - tixora-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 6. Payment & Settlement Microservice
+  payment-service:
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    container_name: tixora-payment-service
+    restart: unless-stopped
+    ports:
+      - "${PAYMENT_SERVICE_PORT}:5005"
+    environment:
+      - PORT=5005
+      - NODE_ENV=${NODE_ENV}
+      - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@payment-db:27017/tixora_payments?authSource=admin
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services/payment-service:/app
+      - payment-service-node-modules:/app/node_modules
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tixora-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 7. Web Frontend Service
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tixora-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT}:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - PORT=3000
+      - API_GATEWAY_URL=http://api-gateway:5000
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - tixora-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# =================================================================
+# PERSISTENT DATA VOLUMES
+# =================================================================
+volumes:
+  auth-db-data:
+    name: tixora_auth_db_data
+  event-db-data:
+    name: tixora_event_db_data
+  booking-db-data:
+    name: tixora_booking_db_data
+  payment-db-data:
+    name: tixora_payment_db_data
+  redis-data:
+    name: tixora_redis_data
+  api-gateway-node-modules:
+    name: tixora_api_gateway_node_modules
+  auth-service-node-modules:
+    name: tixora_auth_service_node_modules
+  event-service-node-modules:
+    name: tixora_event_service_node_modules
+  booking-service-node-modules:
+    name: tixora_booking_service_node_modules
+  notification-service-node-modules:
+    name: tixora_notification_service_node_modules
+  payment-service-node-modules:
+    name: tixora_payment_service_node_modules
+
+# =================================================================
+# CLUSTER BRIDGE NETWORK
+# =================================================================
+networks:
+  tixora-network:
+    name: tixora-cluster-network
+    driver: bridge

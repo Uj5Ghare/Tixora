@@ -1,0 +1,6 @@
+{
+  "name": "Tixora - Microservices Event Booking Platform",
+  "description": "Full-stack event discovery, 2FA OTP booking, and admin platform decomposed into a microservices architecture with API Gateway, Auth, Event, Booking, Notification, and Payment services with interactive system architecture inspection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
