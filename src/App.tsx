@@ -17,7 +17,7 @@ export function App() {
   return (
     <AuthProvider>
       <TelemetryProvider>
-        <Router>
+        <Router basename={import.meta.env.BASE_URL}>
           <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
             {/* Global Navbar */}
             <Navbar />
