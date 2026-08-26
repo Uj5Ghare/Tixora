@@ -1,0 +1,38 @@
+{
+    "Statement": [
+        {
+            "Action": [
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:DeleteObject",
+                "s3:AbortMultipartUpload"
+            ],
+            "Effect": "Allow",
+            "Resource": "arn:aws:s3:::tixora-assets-preprod/*",
+            "Sid": "ObjectReadWrite"
+        },
+        {
+            "Action": [
+                "s3:ListBucket"
+            ],
+            "Effect": "Allow",
+            "Resource": "arn:aws:s3:::tixora-assets-preprod",
+            "Sid": "ListBucket"
+        },
+        {
+            "Action": [
+                "kms:GenerateDataKey",
+                "kms:Decrypt"
+            ],
+            "Condition": {
+                "StringLike": {
+                    "kms:ViaService": "s3.us-east-1.amazonaws.com"
+                }
+            },
+            "Effect": "Allow",
+            "Resource": "arn:aws:kms:us-east-1:111111111111:key/*",
+            "Sid": "KmsForS3Assets"
+        }
+    ],
+    "Version": "2012-10-17"
+}
