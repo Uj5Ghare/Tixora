@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: be-payment-prod
+  namespace: argocd
+spec:
+  destination:
+    namespace: tixora
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    helm:
+      parameters:
+      - name: pdb.enabled
+        value: 'true'
+      valueFiles:
+        - values.yaml
+    path: helm-prod/be-payment
+    repoURL: git@github.com:Uj5Ghare/Tixora.git
+    targetRevision: main
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
