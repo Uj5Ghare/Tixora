@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.defaults.labels }}
+  {{- if .Values.defaults.namespace.enabled }}
+  namespace: {{ .Values.defaults.namespace.name }}
+  {{- end }}
+spec:
+  serviceName: {{ .Values.defaults.labels }}
+  replicas: {{ .Values.sts.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.defaults.labels }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.defaults.labels }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: {{ .Values.sts.affinity.nodeAffinity.key }}
+                  operator: {{ .Values.sts.affinity.nodeAffinity.operator }}
+                  values:
+                  - {{ .Values.sts.affinity.nodeAffinity.values }}
+      tolerations:
+        - key: {{ .Values.sts.tolerations.key }}
+          operator: {{ .Values.sts.tolerations.operator }}
+          value: "{{ .Values.sts.tolerations.value }}"
+          effect: {{ .Values.sts.tolerations.effect }}
+      containers:
+      - name: {{ .Values.defaults.labels }}
+        image: "{{ .Values.sts.image.repository }}:{{ .Values.sts.image.tag }}"
+        imagePullPolicy: {{ .Values.sts.image.pullPolicy }}
+        command:
+          - mongod
+          - "--replSet=rs0"
+          - "--bind_ip_all"
+          - "--auth"
+          - "--keyFile=/etc/mongodb-key/mongodb-keyfile"
+          - "--wiredTigerCacheSizeGB"
+          - "0.5"
+        ports:
+        - containerPort: {{ .Values.service.ports.https.targetPort }}
+        resources:
+          requests:
+            cpu: {{ .Values.sts.resources.requests.cpu }}
+            memory: {{ .Values.sts.resources.requests.memory }}
+        volumeMounts:
+        - name: {{ .Values.defaults.labels }}
+          mountPath: {{ .Values.sts.volumeMounts.mountPath }}
+        - name: mongodb-key
+          mountPath: /etc/mongodb-key
+          readOnly: true
+      volumes:
+      - name: mongodb-key
+        secret:
+          secretName: mongodb-keyfile
+          defaultMode: 0400
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ .Values.defaults.labels }}
+    spec:
+      accessModes: {{ .Values.sts.volumeClaimTemplates.accessModes }}
+      storageClassName: {{ .Values.sts.volumeClaimTemplates.storageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.sts.volumeClaimTemplates.storage }}

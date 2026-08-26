@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.primarySVC.name }}
+  {{- if .Values.defaults.namespace.enabled }}
+  namespace: {{ .Values.defaults.namespace.name }}
+  {{- end }}
+  annotations:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    meta.helm.sh/release-name: {{ .Release.Name }}
+spec:
+  type: {{ .Values.primarySVC.type }}
+  selector:
+    statefulset.kubernetes.io/pod-name: {{ .Values.primarySVC.label }}
+  ports:
+    - name: {{ .Values.primarySVC.ports.https.name }}
+      protocol: {{ .Values.primarySVC.ports.https.protocol }}
+      port: {{ .Values.primarySVC.ports.https.port }}
+      targetPort: {{ .Values.primarySVC.ports.https.targetPort }}
+      nodePort: {{ .Values.primarySVC.ports.https.nodePort }}

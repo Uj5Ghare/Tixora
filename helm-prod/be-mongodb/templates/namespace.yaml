@@ -1,0 +1,16 @@
+{{- if .Values.defaults.namespace.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.defaults.namespace.name }}
+  labels:
+    app: {{ .Values.defaults.labels }}
+  annotations:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.defaults.namespace.name }}
+    helm.sh/hook: pre-install
+    helm.sh/hook-weight: "-1"
+    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/resource-policy: keep #Tell Helm not to delete the namespace while uninstalling chart
+{{- end }}
