@@ -1,0 +1,22 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.rbac.serviceAccountName }}
+  {{- if .Values.defaults.namespace.enabled }}
+  namespace: {{ .Values.defaults.namespace.name }}
+  {{- end }}
+rules:
+  # Allow reading the deployment (to fetch image)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get"]
+
+  # Allow creating Kubernetes Jobs
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create"]
+
+  # (Optional but recommended) allow reading jobs for debugging
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list"]
