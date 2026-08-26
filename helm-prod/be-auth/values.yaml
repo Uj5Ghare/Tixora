@@ -1,0 +1,137 @@
+defaults:
+  namespace:
+    name: tixora
+    enabled: false
+  labels: be-auth
+  managedBy: Helm
+# ROLLOUTS CONFIGURATION
+rollout:
+  # replicaCount: 1
+  instrumentation:
+    nodejs:
+      enabled: true
+  image:
+    repository: uj5ghare/tixora-auth-service
+    tag: v1
+    pullPolicy: IfNotPresent
+  affinity:
+    nodeAffinity:
+      key: workload.tixora.io/instance
+      operator: In
+      values:
+        - tixora-api
+  strategy:
+    type: RollingUpdate
+    maxSurge: 50%
+    maxUnavailable: 0
+    canary:
+      maxSurge: 25%
+      maxUnavailable: 0
+      steps:
+        - setWeight: 20
+        - pause:
+            duration: 5s
+        - setWeight: 50
+        - pause:
+            duration: 5s
+  resources:
+    requests:
+      memory: "250Mi"
+      cpu: "256m" #21 pods (If 1770m cpu)
+  readinessProbe:
+    enabled: false
+    path: /readyz # Health check endpoint for readiness
+    scheme: HTTP
+    initialDelaySeconds: 10 # Wait 10 seconds before starting the probe
+    periodSeconds: 5 # Check every 10 seconds
+    failureThreshold: 3 # Mark as not ready after 3 consecutive failures
+    # successThreshold: 1
+  livenessProbe:
+    enabled: false
+    path: /healthz # Health check endpoint for liveness
+    scheme: HTTP
+    initialDelaySeconds: 30 # Wait 5 seconds before starting the probe
+    periodSeconds: 10 # Check every 10 seconds
+    failureThreshold: 3 # Restart the pod after 3 consecutive failures
+    # successThreshold: 1
+  restartPolicy: Always
+  tolerations:
+    key: eks.k8s.io/instance
+    operator: Equal
+    value:
+      - tixora-api
+    effect: NoSchedule
+      # Before adding tolerations, run this following cmd in order to apply taint on control plane: 
+      # kubectl taint nodes <control-plane-id> control-plane=true:NoSchedule
+# SERVICE CONFIGURATION
+service:
+  stable:
+    type: ClusterIP
+  canary:
+    type: ClusterIP
+  ports:
+    https:
+      name: https
+      protocol: TCP
+      port: 5001
+      targetPort: 5001
+# HORIZONTAL POD AUTOSCALER CONFIGURATION
+hpa:
+  enabled: true
+  maxReplicas: 10
+  minReplicas: 2
+  cpu:
+    metrics:
+      resourceName: cpu
+      averageUtilization: 60 # Scale up when CPU usage is at 90%
+      type: Utilization
+# SECRET CONFIGURATION
+secret:
+  enabled: false
+  name: ecr-secret
+  type: kubernetes.io/dockercfg
+  data: ""
+externalSecret:
+  enabled: true
+  refreshInterval: 10s
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: be-auth-prod
+    creationPolicy: Owner
+  data:
+    - secretKey: PORT
+      remoteRef:
+        key: be-auth-prod
+        property: AUTH_SERVICE_PORT
+    - secretKey: NODE_ENV
+      remoteRef:
+        key: be-auth-prod
+        property: NODE_ENV
+    - secretKey: MONGO_URI
+      remoteRef:
+        key: be-auth-prod
+        property: AUTH_MONGO_URI
+    - secretKey: REDIS_URL
+      remoteRef:
+        key: be-auth-prod
+        property: REDIS_URL
+    - secretKey: JWT_SECRET
+      remoteRef:
+        key: be-auth-prod
+        property: JWT_SECRET
+    - secretKey: NOTIFICATION_SERVICE_URL
+      remoteRef:
+        key: be-auth-prod
+        property: NOTIFICATION_SERVICE_URL
+env:
+  secretRefs:
+    - be-auth-prod
+  vars:
+    - name: OTEL_SERVICE_NAME
+      value: be-auth
+# POD DISRUPTION BUDGET CONFIGURATION
+pdb:
+  enabled: true
+  minAvailable: 1
