@@ -8,7 +8,7 @@ Tixora is a modern event discovery, ticketing, and booking platform. Originally 
 
 ## Architecture Overview
 
-![Tixora Microservices Architecture](../architecture.png)
+![Tixora Microservices Architecture](../assets/project-arch.png)
 
 ### System Architecture
 

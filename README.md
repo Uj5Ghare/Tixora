@@ -1,12 +1,29 @@
 # Tixora — Microservices Event Platform
 
+Tixora is a modern event discovery, ticketing, and booking platform. vibe-coded with passion, built with purpose.
+
+## 📦 Project Demo
+
+Watch a quick video walkthrough of the platform:
+
+<video width="100%" controls>
+  <source src="assets/project-demo.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+A short demo showing the event booking flow — from searching events to ticket reservation — built with the microservices architecture described in this README.
+
+---
+
 Production-grade event ticketing platform refactored from monolithic MERN to **decoupled microservices** with full **AWS cloud infrastructure** and **GitOps deployment**.
 
 ## 🏗 Architecture
 
-![Tixora K8s & IaC Architecture](architecture-k8s-iac.png)
+![Project Overview](assets/project-arch.png)
+*High-level view of the full microservices event platform — all 6 services, database-per-service pattern, and event flow.*
 
-*Figure: Kubernetes & Infrastructure as Code Architecture — AWS Cloud (EKS Auto Mode, VPC, Managed Services) → GitOps Pipeline (Argo CD, Argo Rollouts) → Infrastructure as Code (Terragrunt/Terraform)*
+![K8s & IaC Architecture](assets/k8s-iac-arch.png)
+*Kubernetes on AWS EKS with Terragrunt/Terraform — GitOps pipeline, managed services, and cloud infrastructure.*
 
 | Service | Port | Responsibility |
 |---------|------|----------------|
@@ -71,6 +88,8 @@ Admin: `admin@tixora.com` / `password123`
 User: `user@tixora.com` / `password123`
 
 ---
+
+
 
 ## ☁ AWS Deployment (Terragrunt)
 
