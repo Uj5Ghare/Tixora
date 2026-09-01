@@ -4,14 +4,9 @@ Tixora is a modern event discovery, ticketing, and booking platform. vibe-coded 
 
 ## 📦 Project Demo
 
-Watch a quick video walkthrough of the platform:
+[![Project demo - click to play](assets/project-demo-thumb.png)](assets/project-demo.mp4)
 
-<video width="100%" controls>
-  <source src="assets/project-demo.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
-
-A short demo showing the event booking flow — from searching events to ticket reservation — built with the microservices architecture described in this README.
+A short demo showing the event booking flow — from searching events to ticket reservation — built with the microservices architecture described in this README. Click the image above to open the video in GitHub's file viewer.
 
 ---
 
