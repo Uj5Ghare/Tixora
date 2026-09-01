@@ -1,5 +1,7 @@
 # Tixora — Microservices Event Platform
 
+Tixora is a modern event discovery, ticketing, and booking platform. vibe-coded with passion, built with purpose.
+
 ## 📦 Project Demo
 
 Watch a quick video walkthrough of the platform:
