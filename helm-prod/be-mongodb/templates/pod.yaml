@@ -1,0 +1,25 @@
+{{- if .Values.pod.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Values.defaults.labels }}-bk
+spec:
+  containers:
+  - name: {{ .Values.pod.image.repository }}
+    image: {{ .Values.pod.image.repository }}
+    command: ["sleep","infinity"]
+    resources:
+      requests:
+        cpu: {{ .Values.pod.resources.requests.cpu }}
+        memory: {{ .Values.pod.resources.requests.memory }}
+      limits:
+        cpu: {{ .Values.pod.resources.limits.cpu }}
+        memory: {{ .Values.pod.resources.limits.memory }}
+    volumeMounts:
+    - name: {{ .Values.defaults.labels }}
+      mountPath: {{ .Values.cronjob.mountPath }}
+  volumes:
+  - name: {{ .Values.defaults.labels }}
+    persistentVolumeClaim:
+      claimName: {{ .Values.defaults.labels }}-bk 
+{{- end }}

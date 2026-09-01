@@ -1,0 +1,107 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ .Values.defaults.labels }}
+  {{- if .Values.defaults.namespace.enabled }}
+  namespace: {{ .Values.defaults.namespace.name }}
+  {{- end }}
+  annotations:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.defaults.namespace.name }}
+spec:
+  # replicas: {{ .Values.rollout.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.defaults.labels }}
+  template:
+    metadata:
+      labels :
+        app: {{ .Values.defaults.labels }}
+      annotations : 
+        instrumentation.opentelemetry.io/inject-nodejs: "{{ .Values.rollout.instrumentation.nodejs.enabled }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: {{ .Values.rollout.affinity.nodeAffinity.key }}
+                operator: {{ .Values.rollout.affinity.nodeAffinity.operator }}
+                values:
+                {{- if kindIs "slice" .Values.rollout.affinity.nodeAffinity.values }}
+                {{- range .Values.rollout.affinity.nodeAffinity.values }}
+                - {{ . }}
+                {{- end }}
+                {{- else }}
+                - {{ .Values.rollout.affinity.nodeAffinity.values }}
+                {{- end }}
+      tolerations:
+      {{- if kindIs "slice" .Values.rollout.tolerations.value }}
+      {{- range .Values.rollout.tolerations.value }}
+      - key: {{ $.Values.rollout.tolerations.key }}
+        operator: {{ $.Values.rollout.tolerations.operator }}
+        value: {{ . }}
+        effect: {{ $.Values.rollout.tolerations.effect | default "NoSchedule" }}
+      {{- end }}
+      {{- else }}
+      - key: {{ .Values.rollout.tolerations.key }}
+        operator: {{ .Values.rollout.tolerations.operator }}
+        value: {{ .Values.rollout.tolerations.value }}
+        effect: {{ .Values.rollout.tolerations.effect | default "NoSchedule" }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.defaults.labels }}
+          image: {{ .Values.rollout.image.repository }}:{{ .Values.rollout.image.tag }}
+          imagePullPolicy: {{ .Values.rollout.image.pullPolicy }}
+          {{- if .Values.env.secretRefs }}
+          envFrom:
+            {{- range .Values.env.secretRefs }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.env.vars }}
+          env:
+          {{- range .Values.env.vars }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+          {{- end }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.service.ports.https.targetPort }}
+          resources:
+            requests:
+              memory: {{ .Values.rollout.resources.requests.memory }}
+              cpu: {{ .Values.rollout.resources.requests.cpu }}
+          {{- if .Values.rollout.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.rollout.readinessProbe.path }}
+              port: {{ .Values.service.ports.https.targetPort }}
+              scheme: {{ .Values.rollout.readinessProbe.scheme }}
+            initialDelaySeconds: {{ .Values.rollout.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.rollout.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.rollout.readinessProbe.failureThreshold }}
+            successThreshold: {{ .Values.rollout.readinessProbe.successThreshold | default 1 }}
+          {{- end }}
+          {{- if .Values.rollout.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.rollout.livenessProbe.path }}
+              port: {{ .Values.service.ports.https.targetPort }}
+              scheme: {{ .Values.rollout.livenessProbe.scheme }}
+            initialDelaySeconds: {{ .Values.rollout.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.rollout.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.rollout.livenessProbe.failureThreshold }}
+            successThreshold: {{ .Values.rollout.livenessProbe.successThreshold | default 1 }}
+          {{- end }}
+      restartPolicy: {{ .Values.rollout.restartPolicy }}
+  strategy:
+    canary:
+      stableService: {{ .Values.defaults.labels }}-stable
+      canaryService: {{ .Values.defaults.labels }}-canary
+      maxSurge: {{ .Values.rollout.strategy.canary.maxSurge }}
+      maxUnavailable: {{ .Values.rollout.strategy.canary.maxUnavailable }}
+      steps:
+{{ toYaml .Values.rollout.strategy.canary.steps | nindent 8 }}

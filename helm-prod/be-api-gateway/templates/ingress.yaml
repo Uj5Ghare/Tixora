@@ -1,0 +1,48 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.defaults.labels }}
+  {{- if .Values.defaults.namespace.enabled }}
+  namespace: {{ .Values.defaults.namespace.name }}
+  {{- end }}
+  annotations:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.defaults.namespace.name }}
+    kubernetes.io/ingress.class: {{ .Values.ingress.ingressClassName }}
+    alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.annotations.groupName }}
+    {{- if .Values.ingress.annotations.groupOrder }}
+    alb.ingress.kubernetes.io/group.order: "{{ .Values.ingress.annotations.groupOrder }}"
+    {{- end }}
+    alb.ingress.kubernetes.io/scheme: {{ .Values.ingress.annotations.scheme }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.annotations.certificateArn }}
+    alb.ingress.kubernetes.io/load-balancer-name: {{ .Values.ingress.annotations.loadBalancerName }}
+    alb.ingress.kubernetes.io/target-type: {{ .Values.ingress.annotations.targetType }}
+    {{- if .Values.ingress.annotations.listenPorts }}
+    alb.ingress.kubernetes.io/listen-ports: '{{ .Values.ingress.annotations.listenPorts }}'
+    {{- end }}
+    alb.ingress.kubernetes.io/ip-address-type: {{ .Values.ingress.annotations.ipAddressType }}
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds={{ .Values.ingress.annotations.loadBalancerAttributes }}
+    alb.ingress.kubernetes.io/healthcheck-path: {{ .Values.ingress.annotations.healthCheckPath }}
+    # alb.ingress.kubernetes.io/healthcheck-interval-seconds: {{ .Values.ingress.annotations.healthcheckIntervalSeconds }}
+    # alb.ingress.kubernetes.io/unhealthy-threshold-count: {{ .Values.ingress.annotations.unhealthyThresholdCount }}
+    {{- if .Values.ingress.annotations.sslRedirect }}
+    alb.ingress.kubernetes.io/ssl-redirect: "{{ .Values.ingress.annotations.sslRedirect }}"
+    {{- end }}
+    # alb.ingress.kubernetes.io/backend-protocol: {{ .Values.ingress.annotations.backendProtocol }}
+    # alb.ingress.kubernetes.io/backend-protocol-version: {{ .Values.ingress.annotations.backendProtocolVersion }}
+spec:
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
+  rules:
+    - host: {{ .Values.ingress.api.host }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.api.path }}
+            pathType: {{ .Values.ingress.api.pathType }}
+            backend:
+              service:
+                name: {{ .Values.defaults.labels }}-stable
+                port:
+                  number: {{ .Values.service.ports.https.port }}
+{{- end }}

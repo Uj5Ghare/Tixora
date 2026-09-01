@@ -1,0 +1,27 @@
+{{- if .Values.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.defaults.labels }}
+  {{- if .Values.defaults.namespace.enabled }}
+  namespace: {{ .Values.defaults.namespace.name }}
+  {{- end }}
+  annotations:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.defaults.namespace.name }}
+spec:
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: {{ .Values.hpa.cpu.metrics.resourceName }}
+        target:
+          averageUtilization: {{ .Values.hpa.cpu.metrics.averageUtilization }}
+          type: {{ .Values.hpa.cpu.metrics.type }}
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: {{ .Values.defaults.labels }}
+{{- end }}

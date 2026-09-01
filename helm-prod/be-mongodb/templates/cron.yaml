@@ -1,0 +1,100 @@
+{{- if .Values.cronjob.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Values.defaults.labels }}-bk
+spec:
+  schedule: "{{ .Values.cronjob.schedule.minutes }} {{ .Values.cronjob.schedule.hours }} * * {{ .Values.cronjob.schedule.weekday }}" #"0 0 * * *" # Runs backup At 12:00 AM every day
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: {{ .Values.cronjob.restartPolicy }}
+          tolerations:
+          - key: {{ .Values.sts.tolerations.key }}
+            operator: {{ .Values.sts.tolerations.operator }}
+            value: {{ .Values.sts.tolerations.value }}
+            effect: {{ .Values.sts.tolerations.effect }}
+          containers:
+          - name: {{ .Values.defaults.labels }}
+            image: '{{ .Values.sts.image.repository }}:{{ .Values.sts.image.tag }}'
+            command:
+            - sh
+            - -c
+            - |
+              # SET ERROR HANDLING
+              set -e
+
+              # INSTALLING DEPENDENCIES
+              if ! command -v aws &> /dev/null || ! command -v curl &> /dev/null || ! command -v unzip &> /dev/null; then
+                  apt update
+                  apt install -y curl unzip
+                  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                  unzip awscliv2.zip
+                  ./aws/install
+              fi
+
+              # EXPORTING ENV VARIABLES
+              export AWS_ACCESS_KEY_ID={{ .Values.cronjob.env.AWS_ACCESS_KEY_ID }}
+              export AWS_SECRET_ACCESS_KEY={{ .Values.cronjob.env.AWS_SECRET_ACCESS_KEY }}
+              export AWS_DEFAULT_REGION={{ .Values.cronjob.env.AWS_DEFAULT_REGION }}
+              export AWS_S3_BUCKET_PATH={{ .Values.cronjob.env.AWS_S3_BUCKET_PATH }}
+              export SLACK_WEBHOOK={{ .Values.cronjob.env.SLACK_WEBHOOK }}
+              export MONGO_USERNAME={{ .Values.cronjob.env.MONGO_USERNAME }}
+              export MONGO_PASSWORD={{ .Values.cronjob.env.MONGO_PASSWORD }}
+
+              # CREATING BACKUP FOLDER
+                if [ ! -d "/backup" ]; then
+                  mkdir /backup
+                else 
+                  echo "/backup dir is already present....."
+                fi
+                
+              # BACKING UP DATABASE
+                if mongodump --host="rs0/mongo-0.mongo.mongodb.svc.cluster.local:27017,mongo-1.mongo.mongodb.svc.cluster.local:27017,mongo-2.mongo.mongodb.svc.cluster.local:27017" \
+                  --db={{ .Values.cronjob.dbName }} \
+                  --username=$MONGO_USERNAME \
+                  --password=$MONGO_PASSWORD \
+                  --authenticationDatabase=admin \
+                  --port=27017 \
+                  --gzip \
+                  --archive=/backup/$(date +\%Y-\%m-\%dUTC\%H:\%M:\%S) && aws s3 sync /backup $AWS_S3_BUCKET_PATH/backup
+                then
+                  curl -X POST -H 'Content-type: application/json' --data '{
+                      "blocks": [
+                        {
+                          "type": "section",
+                          "text": {
+                            "type": "mrkdwn",
+                            "text": "*🎉MongoDB Backup Successful for Production........*\n*Date : *`'$(date +\%Y-\%m-\%dUTC\%H:\%M:\%S)'`"
+                          }
+                        }
+                      ]
+                    }' $SLACK_WEBHOOK
+                else
+                  curl -X POST -H 'Content-type: application/json' --data '{
+                      "blocks": [
+                        {
+                          "type": "section",
+                          "text": {
+                            "type": "mrkdwn",
+                            "text": "*⚠️ MongoDB Backup Failed for Production........*\n*Date : *`'$(date +\%Y-\%m-\%dUTC\%H:\%M:\%S)'`"
+                          }
+                        }
+                      ]
+                    }' $SLACK_WEBHOOK
+                fi
+
+              # CLEAR BACKUP DIRECTORY
+              rm -rf /backup/*
+
+              # LOG BACKUP COMPLETION
+              echo "BACKUP COMPLETED SUCCESSFULLY AT $(date)"
+{{- end }}
+
+# TO TAKE MONGODB RESTORE USE THIS COMMAND
+# mongorestore --host="rs0/mongo-0.mongo.mongodb.svc.cluster.local:27017" \
+#   --port=27017 \
+#   --gzip \
+#   --archive=YYYY-MM-DDUTCHH:MM:SS.gz \
+#   --db=tixora-prod

@@ -1,0 +1,23 @@
+{{- if .Values.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.defaults.labels }}
+  {{- if .Values.defaults.namespace.enabled }}
+  namespace: {{ .Values.defaults.namespace.name }}
+  {{- end }}
+spec:
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: {{ .Values.hpa.cpu.metrics.resourceName }}
+        target:
+          averageUtilization: {{ .Values.hpa.cpu.metrics.averageUtilization }}
+          type: {{ .Values.hpa.cpu.metrics.type }}
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: {{ .Values.defaults.labels }}
+{{- end }}

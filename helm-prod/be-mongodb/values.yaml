@@ -1,0 +1,127 @@
+defaults:
+  labels: mongo
+  namespace:
+    enabled: false
+    name: mongodb
+
+# STATEFULSET CONFIGURATION
+sts:
+  replicaCount: 3
+  image:
+    repository: mongo
+    tag: 8.0
+    pullPolicy: IfNotPresent
+  affinity:  # Must attach to the node with the label 'topology.kubernetes.io/zone: ap-south-1c'
+    nodeAffinity:
+      key: kops.k8s.io/instance
+      operator: In
+      values: tixora-db
+  strategy:
+    type: RollingUpdate
+    maxSurge: 50%
+    maxUnavailable: 0
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+  tolerations:
+    key: kops.k8s.io/instance
+    operator: Equal
+    value: tixora-db
+    effect: NoSchedule
+  # Before adding tolerations, run this following cmd in order to apply taint on db-node: 
+  # kubectl taint nodes <node-id> db-node=true:NoSchedule
+  volumeMounts:
+    mountPath: /data/db
+  volumeClaimTemplates:
+    accessModes: ["ReadWriteOncePod"]
+    storageClassName: kops-csi-1-21
+    storage: 10Gi
+
+# SERVICE CONFIGURATION
+service:
+  headless: true
+  type: ClusterIP
+  ports:
+    https:
+      name: https
+      protocol: TCP
+      port: 27017
+      targetPort: 27017
+
+# PRIMARY SERVICE CONFIGURATION
+primarySVC:
+  name: mongo-0
+  label: mongo-0
+  type: NodePort
+  ports:
+    https:
+      name: https
+      protocol: TCP
+      port: 27017
+      targetPort: 27017
+      nodePort: 30010
+
+# BACKUP POD CONFIGURATION
+pod:
+  enabled: false # Enable it after first time deployment of this chart
+  image:
+    repository: busybox
+  resources:
+    requests:
+      cpu: 10m
+      memory: 10Mi
+    limits:
+      cpu: 50m
+      memory: 50Mi
+
+# HORIZONTAL POD AUTOSCALER CONFIGURATION
+hpa:
+  enabled: false
+  maxReplicas: 10
+  minReplicas: 3
+  cpu:
+    metrics:
+      resourceName: cpu
+      averageUtilization: 75
+      type: Utilization
+
+# POD DISRUPTION BUDGET CONFIGURATION
+pdb:
+  enabled: false
+  minAvailable: 2
+
+# PERSISTENTVOLUME CLAIM CONFIGURATION
+pvc:
+  enabled: false
+  storageClassName: gp3
+  accessModes: ReadWriteOnce
+  storage: 3Gi
+
+# STORAGECLASS CONFIGURATION
+sc:
+  enabled: false
+  type: gp3
+  provisioner: ebs.csi.aws.com
+  reclaimPolicy: Retain  # Need to delete pv manually
+  volumeBindingMode: WaitForFirstConsumer
+  allowVolumeExpansion: true
+
+# CRONJOB CONFIGURATION
+cronjob:
+  enabled: false
+  dbName: tixora-prod
+  schedule:
+    minutes: 30 # 0 to 58
+    hours: 2 # Every Monday at 8AM IST and 2:30AM UTC
+    weekday: 1 # 0 to 7
+  restartPolicy: Never
+  mountPath: /backup
+  env:
+    AWS_ACCESS_KEY_ID : ""
+    AWS_SECRET_ACCESS_KEY : ""
+    AWS_DEFAULT_REGION : ""
+    AWS_S3_BUCKET_PATH : ""
+    SLACK_WEBHOOK : ""
+    MONGO_USERNAME : ""
+    MONGO_PASSWORD : ""

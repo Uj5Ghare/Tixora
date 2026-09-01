@@ -1,0 +1,178 @@
+defaults:
+  namespace:
+    name: tixora
+    enabled: false
+  labels: be-api
+  managedBy: Helm
+# DEPLOYMENT CONFIGURATION
+rollout:
+  # replicaCount: 1
+  instrumentation:
+    nodejs:
+      enabled: true
+  image:
+    repository: uj5ghare/tixora-api-gateway:v1
+    tag: v1
+    pullPolicy: IfNotPresent
+  affinity:
+    nodeAffinity:
+      key: workload.tixora.io/instance
+      operator: In
+      values:
+        - tixora-api
+  strategy:
+    type: RollingUpdate
+    maxSurge: 50%
+    maxUnavailable: 0
+    canary:
+      maxSurge: 25%
+      maxUnavailable: 0
+      steps:
+        - setWeight: 20
+        - pause:
+            duration: 5s
+        - setWeight: 50
+        - pause:
+            duration: 5s
+  resources:
+    requests:
+      memory: "250Mi"
+      cpu: "256m" #21 pods (If 1770m cpu)
+  readinessProbe:
+    enabled: false
+    path: /api/readyz # Health check endpoint for readiness
+    scheme: HTTP
+    initialDelaySeconds: 10 # Wait 10 seconds before starting the probe
+    periodSeconds: 5 # Check every 10 seconds
+    failureThreshold: 3 # Mark as not ready after 3 consecutive failures
+    # successThreshold: 1
+  livenessProbe:
+    enabled: false
+    path: /api/healthz # Health check endpoint for liveness
+    scheme: HTTP
+    initialDelaySeconds: 30 # Wait 5 seconds before starting the probe
+    periodSeconds: 10 # Check every 10 seconds
+    failureThreshold: 3 # Restart the pod after 3 consecutive failures
+    # successThreshold: 1
+  restartPolicy: Always
+  tolerations:
+    key: eks.k8s.io/instance
+    operator: Equal
+    value:
+      - tixora-api
+    effect: NoSchedule
+      # Before adding tolerations, run this following cmd in order to apply taint on control plane: 
+      # kubectl taint nodes <control-plane-id> control-plane=true:NoSchedule
+# SERVICE CONFIGURATION
+service:
+  stable:
+    type: ClusterIP
+  canary:
+    type: ClusterIP
+  ports:
+    https:
+      name: https
+      protocol: TCP
+      port: 5000
+      targetPort: 5000
+# INGRESS CONFIGURATION
+# Ingress Annotations: https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.2/guide/ingress/annotations/
+ingress:
+  enabled: true
+  ingressClassName: alb
+  annotations:
+    groupName: "shared-lb"
+    groupOrder: "30"
+    scheme: "internet-facing" # OR internal
+    certificateArn: ""
+    loadBalancerName: "tixora-prod"
+    targetType: "ip" # Use ip when sharing ALB with other ingress rules
+    ipAddressType: "ipv4" # or dualstack
+    listenPorts: '[{"HTTP":80},{"HTTPS":443}]'
+    sslRedirect: "443"
+    loadBalancerAttributes: 120 # Timeout for ingress (after this much seconds request will fail if not completed)
+    healthCheckPath: /api/healthz
+    # healthcheckIntervalSeconds: 5
+    # unhealthyThresholdCount: 2
+    # sslRedirect: "443"
+    # backendProtocol: "HTTPS" # Routes traffics to pods over HTTPS or HTTP
+  api:
+    host: apis.tixora.com
+    path: /
+    pathType: Prefix
+# HORIZONTAL POD AUTOSCALER CONFIGURATION
+hpa:
+  enabled: true
+  maxReplicas: 10
+  minReplicas: 2
+  cpu:
+    metrics:
+      resourceName: cpu
+      averageUtilization: 60 # Scale up when CPU usage is at 90%
+      type: Utilization
+# SECRET CONFIGURATION
+secret:
+  enabled: false
+  name: ecr-secret
+  type: kubernetes.io/dockercfg
+  data: ""
+externalSecret:
+  enabled: true
+  refreshInterval: 10s
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: be-api-prod
+    creationPolicy: Owner
+  data:
+    - secretKey: PORT
+      remoteRef:
+        key: be-api-prod
+        property: API_GATEWAY_PORT
+    - secretKey: NODE_ENV
+      remoteRef:
+        key: be-api-prod
+        property: NODE_ENV
+    - secretKey: AUTH_SERVICE_URL
+      remoteRef:
+        key: be-api-prod
+        property: AUTH_SERVICE_URL
+    - secretKey: EVENT_SERVICE_URL
+      remoteRef:
+        key: be-api-prod
+        property: EVENT_SERVICE_URL
+    - secretKey: BOOKING_SERVICE_URL
+      remoteRef:
+        key: be-api-prod
+        property: BOOKING_SERVICE_URL
+    - secretKey: NOTIFICATION_SERVICE_URL
+      remoteRef:
+        key: be-api-prod
+        property: NOTIFICATION_SERVICE_URL
+    - secretKey: PAYMENT_SERVICE_URL
+      remoteRef:
+        key: be-api-prod
+        property: PAYMENT_SERVICE_URL
+    - secretKey: REDIS_URL
+      remoteRef:
+        key: be-api-prod
+        property: REDIS_URL
+    - secretKey: JWT_SECRET
+      remoteRef:
+        key: be-api-prod
+        property: JWT_SECRET
+env:
+  secretRefs:
+    - be-api-prod
+  vars:
+    - name: OTEL_SERVICE_NAME
+      value: be-api-gateway
+# POD DISRUPTION BUDGET CONFIGURATION
+pdb:
+  enabled: true
+  minAvailable: 1
+rbac:
+  serviceAccountName: "tixora-api"
+  roleArn: ""
+  audience: "sts.amazonaws.com"
