@@ -20,6 +20,11 @@ Production-grade event ticketing platform refactored from monolithic MERN to **d
 ![K8s & IaC Architecture](assets/k8s-iac-arch.png)
 *Kubernetes on AWS EKS with Terragrunt/Terraform — GitOps pipeline, managed services, and cloud infrastructure.*
 
+### AWS Services Architecture
+
+![AWS Architecture](assets/tixora-aws-architecture.png)
+*Complete AWS infrastructure — Route 53, CloudFront, WAF, ALB, EKS cluster with 6 microservices, MongoDB, Redis, Secrets Manager, KMS, ECR, SQS, CloudWatch, and Argo CD GitOps pipeline.*
+
 | Service | Port | Responsibility |
 |---------|------|----------------|
 | API Gateway | 5000 | Ingress, JWT auth, rate limiting, service routing |
