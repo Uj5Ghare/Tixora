@@ -1,0 +1,217 @@
+version: 1
+
+frontend:
+  phases:
+    preBuild:
+      commands:
+        # Build start time
+        - export BUILD_START_TIME=$(date +%s)
+
+        # Repository information
+        - export REPO_NAME=$(git remote get-url origin | sed 's#.*/##' | sed 's/\.git$//')
+        - export COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an")
+        - export COMMIT_EMAIL=$(git log -1 --pretty=format:"%ae")
+        - export COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s" | head -c 150)
+        - export COMMIT_DATE=$(git log -1 --pretty=format:"%ai")
+
+        # Environment mapping
+        - |
+          case "$AWS_BRANCH" in
+            "env/staging")
+              export ENV="STAGING"
+              ;;
+            "env/uat")
+              export ENV="UAT"
+              ;;
+            "env/preprod")
+              export ENV="PREPROD"
+              ;;
+            "env/prod")
+              export ENV="PROD"
+              ;;
+            *)
+              export ENV="UNKNOWN"
+              ;;
+          esac
+
+        # Install dependencies
+        - npm install --ignore-scripts
+    build:
+      commands:
+        - |
+          set +e
+          # npm run build 2>&1 | sed 's/\x1B\[[0-9;]*[mKHFJ]//g' > build.log
+          npm run build 2>&1 | tee build.log
+
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          echo "$BUILD_EXIT_CODE" > build.exit.code
+          set -e
+
+    postBuild:
+      commands:
+        - |
+          BUILD_END_TIME=$(date +%s)
+          TOTAL=$((BUILD_END_TIME - BUILD_START_TIME))
+          DURATION="${TOTAL}s ($((TOTAL/60))m $((TOTAL%60))s)"
+
+          BUILD_EXIT_CODE=$(cat build.exit.code)
+
+          # AWS_APP_NAME is the Amplify app name (e.g. "web-app"), used for the file name
+          APP_LABEL="${AWS_APP_NAME:-${REPO_NAME}}"
+          BUILD_URL="https://console.aws.amazon.com/amplify/apps/${AWS_APP_ID}/builds/${AWS_JOB_ID}"
+
+          ####################################################################
+          # SUCCESS
+          ####################################################################
+          if [ "$BUILD_EXIT_CODE" -eq 0 ]; then
+
+            curl -s -X POST "$SLACK_WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"attachments\": [
+                  {
+                    \"color\": \"good\",
+                    \"emoji\": \"✅\",
+                    \"title\": \"SUCCESS: ${REPO_NAME}\",
+                    \"title_link\": \"${BUILD_URL}\",
+                    \"fields\": [
+                      { \"title\": \"Repository\",  \"value\": \"${REPO_NAME}\",     \"short\": true },
+                      { \"title\": \"Environment\", \"value\": \"${ENV}\",           \"short\": true },
+                      { \"title\": \"Branch\",      \"value\": \"${AWS_BRANCH}\",    \"short\": true },
+                      { \"title\": \"Duration\",    \"value\": \"${DURATION}\",      \"short\": true },
+                      { \"title\": \"Author\",      \"value\": \"${COMMIT_AUTHOR}\", \"short\": true },
+                      { \"title\": \"Commit SHA\",  \"value\": \"${AWS_COMMIT_ID}\", \"short\": true }
+                    ],
+                    \"footer\": \"AWS Amplify\",
+                    \"ts\": $(date +%s)
+                  }
+                ]
+              }"
+
+            exit 0
+          fi
+
+          ####################################################################
+          # FAILURE
+          ####################################################################
+
+          REPORT_FILE="build-failure-${APP_LABEL}-${AWS_COMMIT_ID:0:7}-$(date +%Y%m%d-%H%M%S).txt"
+
+          # Find the latest npm debug log if it exists
+          NPM_DEBUG_LOG=$(ls -t /root/.npm/_logs/*.log 2>/dev/null | head -1)
+
+          {
+            echo "================================================================================"
+            echo "                          AWS AMPLIFY BUILD FAILURE REPORT"
+            echo "================================================================================"
+            echo ""
+            echo "Timestamp      : $(date)"
+            echo ""
+            echo "App Name       : ${APP_LABEL}"
+            echo "Repository     : ${REPO_NAME}"
+            echo "Environment    : ${ENV}"
+            echo "Branch         : ${AWS_BRANCH}"
+            echo ""
+            echo "Build Status   : FAILED"
+            echo "Job ID         : ${AWS_JOB_ID}"
+            echo "Build URL      : ${BUILD_URL}"
+            echo ""
+            echo "================================================================================"
+            echo "COMMIT INFORMATION"
+            echo "================================================================================"
+            echo ""
+            echo "Author         : ${COMMIT_AUTHOR}"
+            echo "Email          : ${COMMIT_EMAIL}"
+            echo "Commit SHA     : ${AWS_COMMIT_ID}"
+            echo "Commit Date    : ${COMMIT_DATE}"
+            echo "Commit Message : ${COMMIT_MESSAGE}"
+            echo ""
+            echo "================================================================================"
+            echo "BUILD TIMING"
+            echo "================================================================================"
+            echo ""
+            echo "Started At     : $(date -d @${BUILD_START_TIME} 2>/dev/null || echo ${BUILD_START_TIME})"
+            echo "Finished At    : $(date -d @${BUILD_END_TIME} 2>/dev/null || echo ${BUILD_END_TIME})"
+            echo "Duration       : ${DURATION}"
+            echo ""
+            echo "================================================================================"
+            echo "FULL BUILD LOG (stdout + stderr)"
+            echo "================================================================================"
+            echo ""
+            cat build.log
+            echo ""
+            echo "================================================================================"
+            echo "NPM DEBUG LOG (detailed error trace)"
+            echo "================================================================================"
+            echo ""
+            if [ -n "$NPM_DEBUG_LOG" ] && [ -f "$NPM_DEBUG_LOG" ]; then
+              cat "$NPM_DEBUG_LOG"
+            else
+              echo "No npm debug log found."
+            fi
+            echo ""
+            echo "================================================================================"
+            echo "END OF REPORT"
+            echo "================================================================================"
+          } > "$REPORT_FILE"
+
+          echo "Uploading failure report to Slack..."
+
+          # Step 1: Get upload URL
+          FILE_SIZE=$(wc -c < "${REPORT_FILE}")
+          UPLOAD_RESPONSE=$(curl -s -X POST "https://slack.com/api/files.getUploadURLExternal" \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "filename=${REPORT_FILE}" \
+            --data-urlencode "length=${FILE_SIZE}")
+
+          UPLOAD_URL=$(echo "$UPLOAD_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['upload_url'])")
+          FILE_ID=$(echo "$UPLOAD_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['file_id'])")
+
+          # Step 2: Upload file content
+          curl -s -X POST "$UPLOAD_URL" \
+            -F "filename=@${REPORT_FILE}" >/dev/null
+
+          # Step 3: Complete upload and share to channel
+          curl -s -X POST "https://slack.com/api/files.completeUploadExternal" \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "{\"files\": [{\"id\": \"${FILE_ID}\"}], \"channel_id\": \"${SLACK_CHANNEL_ID}\", \"initial_comment\": \"📎 Build failure report: ${REPO_NAME}.\"}" >/dev/null
+
+          # Send Slack notification card
+          curl -s -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"attachments\": [
+                {
+                  \"color\": \"danger\",
+                  \"emoji\": \"❌\",
+                  \"title\": \"Amplify Build Failed\",
+                  \"title_link\": \"${BUILD_URL}\",
+                  \"fields\": [
+                    { \"title\": \"Repository\",  \"value\": \"${REPO_NAME}\",      \"short\": true },
+                    { \"title\": \"Environment\", \"value\": \"${ENV}\",            \"short\": true },
+                    { \"title\": \"Branch\",      \"value\": \"${AWS_BRANCH}\",     \"short\": true },
+                    { \"title\": \"Duration\",    \"value\": \"${DURATION}\",       \"short\": true },
+                    { \"title\": \"Author\",      \"value\": \"${COMMIT_AUTHOR}\",  \"short\": true },
+                    { \"title\": \"Commit SHA\",  \"value\": \"${AWS_COMMIT_ID}\",  \"short\": true }
+                  ],
+                  \"text\": \"📎 The complete build log has been uploaded as a downloadable attachment.\",
+                  \"footer\": \"AWS Amplify\",
+                  \"ts\": $(date +%s)
+                }
+              ]
+            }"
+
+          rm -f "${REPORT_FILE}"
+
+          exit 1
+
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+
+  cache:
+    paths:
+      - .npm/**/*
